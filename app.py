@@ -71,72 +71,102 @@ def calc_lambda(avg, total_minutes, interval):
 def split(avg):
     return avg * 0.48, avg * 0.52
 
-# 🔥 UPDATED GAME STATE (ONLY THIS CHANGED)
-def apply_game_state(name, l_home, l_away, state, start_min, home_avg, away_avg):
 
-    is_home_strong = home_avg > away_avg
-    is_away_strong = away_avg > home_avg
+# =========================
+# 🔥 STRENGTH FROM SHOTS
+# =========================
+if min(home_shot, away_shot) == 0:
+    ratio = 1
+else:
+    ratio = max(home_shot, away_shot) / min(home_shot, away_shot)
 
+is_balanced = ratio < 1.3
+is_strong = ratio > 2
+
+
+# =========================
+# 🔥 GAME STATE LOGIC
+# =========================
+def apply_game_state(name, l_home, l_away, state, start_min,
+                     home_avg, away_avg,
+                     is_balanced, is_strong,
+                     home_shot, away_shot):
+
+    is_home_strong = home_shot > away_shot
+    is_away_strong = away_shot > home_shot
+
+    # --- MARKET WEIGHTS ---
+    if name == "Shots":
+        strong_push = 1.30
+        weak_push = 1.10
+        win_reduce = 0.93
+
+    elif name == "Shots on Target":
+        strong_push = 1.22
+        weak_push = 1.07
+        win_reduce = 0.95
+
+    elif name == "Corners":
+        strong_push = 1.22
+        weak_push = 1.07
+        win_reduce = 0.95
+
+    elif name == "Throw-ins":
+        strong_push = 1.20
+        weak_push = 1.06
+        win_reduce = 0.96
+
+    else:
+        return l_home, l_away
+
+    # --- MINUTE BOOST ---
     factor = max(0, (start_min - 60) / 30)
-    extra = factor * 0.10
+    strong_push += factor * 0.10
+    weak_push += factor * 0.05
 
-    strong_boost = {
-        "Shots": 1.25,
-        "Shots on Target": 1.20,
-        "Corners": 1.15,
-        "Throw-ins": 1.08
-    }
-
-    weak_boost = {
-        "Shots": 1.10,
-        "Shots on Target": 1.08,
-        "Corners": 1.06,
-        "Throw-ins": 1.03
-    }
-
-    # -------- HOME LOSING --------
+    # =========================
+    # HOME LOSING
+    # =========================
     if state == "Home Losing":
 
-        if is_home_strong:
-            if name in strong_boost:
-                l_home *= strong_boost[name] + extra
+        if is_balanced:
+            l_home *= strong_push
+            l_away *= win_reduce
 
-        else:  # weak losing → no change
-            pass
+        elif is_strong:
+            if is_home_strong:
+                l_home *= strong_push
+            else:
+                l_away *= weak_push
 
-        # weak winning small boost
-        if not is_home_strong:
-            if name in weak_boost:
-                l_away *= weak_boost[name]
-
-    # -------- AWAY LOSING --------
+    # =========================
+    # AWAY LOSING
+    # =========================
     elif state == "Away Losing":
 
-        if is_away_strong:
-            if name in strong_boost:
-                l_away *= strong_boost[name] + extra
+        if is_balanced:
+            l_away *= strong_push
+            l_home *= win_reduce
 
-        else:
-            pass
+        elif is_strong:
+            if is_away_strong:
+                l_away *= strong_push
+            else:
+                l_home *= weak_push
 
-        if not is_away_strong:
-            if name in weak_boost:
-                l_home *= weak_boost[name]
-
-    # -------- BIG STATES --------
+    # =========================
+    # BIG STATES
+    # =========================
     elif state == "Home Losing BIG":
-
         if is_home_strong:
-            if name in strong_boost:
-                l_home *= (strong_boost[name] + 0.10 + extra)
+            l_home *= strong_push + 0.10
 
     elif state == "Away Losing BIG":
-
         if is_away_strong:
-            if name in strong_boost:
-                l_away *= (strong_boost[name] + 0.10 + extra)
+            l_away *= strong_push + 0.10
 
     return l_home, l_away
+
 
 # --- CARD DISTRIBUTION ---
 card_dist = [
@@ -151,6 +181,7 @@ def card_lambda(avg, start, end):
         if overlap > 0:
             total += avg * w * (overlap / (e - s))
     return total
+
 
 # --- MARKETS ---
 markets = {
@@ -234,8 +265,13 @@ for name, (home, away, adj) in markets.items():
             l_home *= 1 + factor * 0.10
             l_away *= 1 + factor * 0.10
 
-    # 🔥 ONLY NEW LINE
-    l_home, l_away = apply_game_state(name, l_home, l_away, score_state, start_min, home, away)
+    # 🔥 ONLY NEW ADDITION
+    l_home, l_away = apply_game_state(
+        name, l_home, l_away, score_state,
+        start_min, home, away,
+        is_balanced, is_strong,
+        home_shot, away_shot
+    )
 
     l_total = l_home + l_away
     total_lambdas[name] = l_total
