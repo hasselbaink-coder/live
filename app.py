@@ -71,10 +71,7 @@ def calc_lambda(avg, total_minutes, interval):
 def split(avg):
     return avg * 0.48, avg * 0.52
 
-
-# =========================
-# GAP LOGIC (shots based)
-# =========================
+# --- GAP ---
 if min(home_shot, away_shot) == 0:
     ratio = 1
 else:
@@ -87,17 +84,13 @@ elif ratio < 2.0:
 else:
     gap_level = "strong"
 
-
-# =========================
-# GAME STATE ENGINE
-# =========================
+# --- GAME STATE ---
 def apply_game_state(name, l_home, l_away, state, start_min,
                      gap_level, home_shot, away_shot):
 
     is_home_strong = home_shot > away_shot
     is_away_strong = away_shot > home_shot
 
-    # MARKET WEIGHTS
     if name == "Shots":
         strong_push = 1.30
         medium_push = 1.18
@@ -121,14 +114,10 @@ def apply_game_state(name, l_home, l_away, state, start_min,
     else:
         return l_home, l_away
 
-    # minute boost
     factor = max(0, (start_min - 60) / 30)
     strong_push += factor * 0.10
     medium_push += factor * 0.07
 
-    # =====================
-    # HOME LOSING
-    # =====================
     if state == "Home Losing":
 
         if gap_level == "balanced":
@@ -147,9 +136,6 @@ def apply_game_state(name, l_home, l_away, state, start_min,
             else:
                 l_home *= 1.05
 
-    # =====================
-    # AWAY LOSING
-    # =====================
     elif state == "Away Losing":
 
         if gap_level == "balanced":
@@ -168,18 +154,15 @@ def apply_game_state(name, l_home, l_away, state, start_min,
             else:
                 l_away *= 1.05
 
-    # =====================
-    # BIG STATES (FIXED)
-    # =====================
     elif state == "Home Losing BIG":
         if is_home_strong:
-            l_home *= strong_push * 1.15
+            l_home *= strong_push * 1.20
         else:
             l_home *= 1.05
 
     elif state == "Away Losing BIG":
         if is_away_strong:
-            l_away *= strong_push * 1.15
+            l_away *= strong_push * 1.20
         else:
             l_away *= 1.05
 
@@ -249,7 +232,6 @@ for name, (home, away, adj) in markets.items():
             l_home = calc_lambda(sh_home, sh_min, minutes)
             l_away = calc_lambda(sh_away, sh_min, minutes)
 
-    # base boosts
     throw_boost = 1 + (minutes / 10) * 0.15
     shot_interval_boost = 1 + (minutes / 10) * 0.15
 
@@ -264,7 +246,6 @@ for name, (home, away, adj) in markets.items():
         l_home *= shot_interval_boost
         l_away *= shot_interval_boost
 
-    # late game
     if start_min >= 75 and name not in ["Cards", "Offsides", "Fouls"]:
         factor = (start_min - 75) / 15
 
@@ -284,24 +265,20 @@ for name, (home, away, adj) in markets.items():
             l_home *= 1 + factor * 0.10
             l_away *= 1 + factor * 0.10
 
-    # save total
     l_total_before = l_home + l_away
 
-    # apply game state
     l_home, l_away = apply_game_state(
-        name, l_home, l_away,
-        score_state, start_min,
-        gap_level, home_shot, away_shot
+        name, l_home, l_away, score_state,
+        start_min, gap_level, home_shot, away_shot
     )
 
-    # normalization
     normalize = False
 
-    if name in ["Shots on Target", "Corners", "Throw-ins"]:
-        normalize = True
-
-    elif name == "Shots" and gap_level != "strong":
-        normalize = True
+    if score_state not in ["Home Losing BIG", "Away Losing BIG"]:
+        if name in ["Shots on Target", "Corners", "Throw-ins"]:
+            normalize = True
+        elif name == "Shots" and gap_level != "strong":
+            normalize = True
 
     if normalize:
         new_total = l_home + l_away
