@@ -141,7 +141,7 @@ def apply_game_state(name, l_home, l_away, state, start_min,
             if is_home_strong:
                 l_home *= strong_push
             else:
-                l_home *= 1.05  # 🔥 tiny push weak losing
+                l_home *= 1.05
 
     # --- AWAY LOSING ---
     elif state == "Away Losing":
@@ -160,16 +160,20 @@ def apply_game_state(name, l_home, l_away, state, start_min,
             if is_away_strong:
                 l_away *= strong_push
             else:
-                l_away *= 1.05  # 🔥 tiny push weak losing
+                l_away *= 1.05
 
-    # --- BIG STATES ---
+    # --- BIG STATES (FIXED) ---
     elif state == "Home Losing BIG":
         if is_home_strong:
             l_home *= strong_push + 0.10
+        else:
+            l_home *= 1.05
 
     elif state == "Away Losing BIG":
         if is_away_strong:
             l_away *= strong_push + 0.10
+        else:
+            l_away *= 1.05
 
     return l_home, l_away
 
@@ -237,7 +241,6 @@ for name, (home, away, adj) in markets.items():
             l_home = calc_lambda(sh_home, sh_min, minutes)
             l_away = calc_lambda(sh_away, sh_min, minutes)
 
-    # --- BOOSTS ---
     throw_boost = 1 + (minutes / 10) * 0.15
     shot_interval_boost = 1 + (minutes / 10) * 0.15
 
@@ -271,10 +274,8 @@ for name, (home, away, adj) in markets.items():
             l_home *= 1 + factor * 0.10
             l_away *= 1 + factor * 0.10
 
-    # --- NORMALIZATION BASE ---
     l_total_before = l_home + l_away
 
-    # --- APPLY STATE ---
     l_home, l_away = apply_game_state(
         name, l_home, l_away, score_state,
         start_min, home, away,
@@ -282,7 +283,6 @@ for name, (home, away, adj) in markets.items():
         home_shot, away_shot
     )
 
-    # --- NORMALIZATION RULES ---
     normalize = False
 
     if name in ["Shots on Target", "Corners", "Throw-ins"]:
