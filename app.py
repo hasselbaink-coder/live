@@ -73,23 +73,27 @@ def split(avg):
 
 
 # =========================
-# 🔥 STRENGTH FROM SHOTS
+# 🔥 GAP LEVEL (NEW)
 # =========================
 if min(home_shot, away_shot) == 0:
     ratio = 1
 else:
     ratio = max(home_shot, away_shot) / min(home_shot, away_shot)
 
-is_balanced = ratio < 1.3
-is_strong = ratio > 2
+if ratio < 1.2:
+    gap_level = "balanced"
+elif ratio < 2.0:
+    gap_level = "medium"
+else:
+    gap_level = "strong"
 
 
 # =========================
-# 🔥 GAME STATE LOGIC
+# 🔥 GAME STATE
 # =========================
 def apply_game_state(name, l_home, l_away, state, start_min,
                      home_avg, away_avg,
-                     is_balanced, is_strong,
+                     gap_level,
                      home_shot, away_shot):
 
     is_home_strong = home_shot > away_shot
@@ -98,42 +102,52 @@ def apply_game_state(name, l_home, l_away, state, start_min,
     # --- MARKET WEIGHTS ---
     if name == "Shots":
         strong_push = 1.30
+        medium_push = 1.18
         weak_push = 1.10
         win_reduce = 0.93
 
     elif name == "Shots on Target":
         strong_push = 1.22
+        medium_push = 1.15
         weak_push = 1.07
         win_reduce = 0.95
 
     elif name == "Corners":
         strong_push = 1.22
+        medium_push = 1.15
         weak_push = 1.07
         win_reduce = 0.95
 
     elif name == "Throw-ins":
         strong_push = 1.20
+        medium_push = 1.12
         weak_push = 1.06
         win_reduce = 0.96
 
     else:
         return l_home, l_away
 
-    # --- MINUTE BOOST ---
+    # --- minute boost ---
     factor = max(0, (start_min - 60) / 30)
     strong_push += factor * 0.10
-    weak_push += factor * 0.05
+    medium_push += factor * 0.07
 
     # =========================
     # HOME LOSING
     # =========================
     if state == "Home Losing":
 
-        if is_balanced:
-            l_home *= strong_push
+        if gap_level == "balanced":
+            l_home *= medium_push
             l_away *= win_reduce
 
-        elif is_strong:
+        elif gap_level == "medium":
+            if is_home_strong:
+                l_home *= medium_push
+            else:
+                l_away *= weak_push
+
+        elif gap_level == "strong":
             if is_home_strong:
                 l_home *= strong_push
             else:
@@ -144,11 +158,17 @@ def apply_game_state(name, l_home, l_away, state, start_min,
     # =========================
     elif state == "Away Losing":
 
-        if is_balanced:
-            l_away *= strong_push
+        if gap_level == "balanced":
+            l_away *= medium_push
             l_home *= win_reduce
 
-        elif is_strong:
+        elif gap_level == "medium":
+            if is_away_strong:
+                l_away *= medium_push
+            else:
+                l_home *= weak_push
+
+        elif gap_level == "strong":
             if is_away_strong:
                 l_away *= strong_push
             else:
@@ -265,13 +285,32 @@ for name, (home, away, adj) in markets.items():
             l_home *= 1 + factor * 0.10
             l_away *= 1 + factor * 0.10
 
-    # 🔥 ONLY NEW ADDITION
+    # --- NORMALIZATION BASE ---
+    l_total_before = l_home + l_away
+
+    # --- APPLY STATE ---
     l_home, l_away = apply_game_state(
         name, l_home, l_away, score_state,
         start_min, home, away,
-        is_balanced, is_strong,
+        gap_level,
         home_shot, away_shot
     )
+
+    # --- NORMALIZATION RULES ---
+    normalize = False
+
+    if name in ["Shots on Target", "Corners", "Throw-ins"]:
+        normalize = True
+
+    elif name == "Shots" and gap_level != "strong":
+        normalize = True
+
+    if normalize:
+        new_total = l_home + l_away
+        if new_total > 0:
+            scale = l_total_before / new_total
+            l_home *= scale
+            l_away *= scale
 
     l_total = l_home + l_away
     total_lambdas[name] = l_total
