@@ -34,7 +34,7 @@ away_off = st.number_input("Away Offsides", value=2.0)
 
 st.markdown("---")
 
-# 🔥 NEW: SCORE STATE
+# --- SCORE STATE ---
 score_state = st.selectbox(
     "Score State",
     ["Draw", "Home Losing", "Away Losing", "Home Losing BIG", "Away Losing BIG"]
@@ -71,72 +71,70 @@ def calc_lambda(avg, total_minutes, interval):
 def split(avg):
     return avg * 0.48, avg * 0.52
 
-# 🔥 NEW: GAP IMPACT
-def get_impact(home_avg, away_avg):
-    stronger = max(home_avg, away_avg)
-    weaker = min(home_avg, away_avg)
-    if stronger == 0:
-        return 1
-    ratio = weaker / stronger
-    return ratio ** 0.5
-
-# 🔥 NEW: GAME STATE
+# 🔥 UPDATED GAME STATE (ONLY THIS CHANGED)
 def apply_game_state(name, l_home, l_away, state, start_min, home_avg, away_avg):
 
-    impact = get_impact(home_avg, away_avg)
-
-    # upset boost
-    if (state == "Home Losing" and home_avg < away_avg) or \
-       (state == "Away Losing" and away_avg < home_avg):
-        impact *= 1.25
+    is_home_strong = home_avg > away_avg
+    is_away_strong = away_avg > home_avg
 
     factor = max(0, (start_min - 60) / 30)
     extra = factor * 0.10
 
-    base_small = {
-        "Shots": 1.15,
-        "Shots on Target": 1.12,
-        "Corners": 1.10,
-        "Throw-ins": 1.05
-    }
-
-    base_big = {
+    strong_boost = {
         "Shots": 1.25,
         "Shots on Target": 1.20,
         "Corners": 1.15,
         "Throw-ins": 1.08
     }
 
-    reduce_small = 0.95
-    reduce_big = 0.92
+    weak_boost = {
+        "Shots": 1.10,
+        "Shots on Target": 1.08,
+        "Corners": 1.06,
+        "Throw-ins": 1.03
+    }
 
+    # -------- HOME LOSING --------
     if state == "Home Losing":
-        if name in base_small:
-            mult = 1 + (base_small[name] - 1) * impact + extra
-            l_home *= mult
-            if name in ["Shots", "Corners"]:
-                l_away *= reduce_small
 
+        if is_home_strong:
+            if name in strong_boost:
+                l_home *= strong_boost[name] + extra
+
+        else:  # weak losing → no change
+            pass
+
+        # weak winning small boost
+        if not is_home_strong:
+            if name in weak_boost:
+                l_away *= weak_boost[name]
+
+    # -------- AWAY LOSING --------
     elif state == "Away Losing":
-        if name in base_small:
-            mult = 1 + (base_small[name] - 1) * impact + extra
-            l_away *= mult
-            if name in ["Shots", "Corners"]:
-                l_home *= reduce_small
 
+        if is_away_strong:
+            if name in strong_boost:
+                l_away *= strong_boost[name] + extra
+
+        else:
+            pass
+
+        if not is_away_strong:
+            if name in weak_boost:
+                l_home *= weak_boost[name]
+
+    # -------- BIG STATES --------
     elif state == "Home Losing BIG":
-        if name in base_big:
-            mult = 1 + (base_big[name] - 1) * impact + extra
-            l_home *= mult
-            if name in ["Shots", "Corners"]:
-                l_away *= reduce_big
+
+        if is_home_strong:
+            if name in strong_boost:
+                l_home *= (strong_boost[name] + 0.10 + extra)
 
     elif state == "Away Losing BIG":
-        if name in base_big:
-            mult = 1 + (base_big[name] - 1) * impact + extra
-            l_away *= mult
-            if name in ["Shots", "Corners"]:
-                l_home *= reduce_big
+
+        if is_away_strong:
+            if name in strong_boost:
+                l_away *= (strong_boost[name] + 0.10 + extra)
 
     return l_home, l_away
 
