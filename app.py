@@ -37,7 +37,7 @@ st.markdown("---")
 # --- SCORE STATE ---
 score_state = st.selectbox(
     "Score State",
-    ["Draw", "Home Losing", "Away Losing", "Home Losing BIG", "Away Losing BIG"]
+    ["Draw", "Home Losing", "Away Losing"]
 )
 
 # --- INTERVAL ---
@@ -118,47 +118,43 @@ def apply_game_state(name, l_home, l_away, state, start_min,
     strong_push += factor * 0.10
     medium_push += factor * 0.07
 
+    # --- HOME LOSING ---
     if state == "Home Losing":
+
         if gap_level == "balanced":
             l_home *= medium_push
             l_away *= win_reduce
+
         elif gap_level == "medium":
             if is_home_strong:
                 l_home *= medium_push
             else:
                 l_away *= 1.07
+
         elif gap_level == "strong":
             if is_home_strong:
                 l_home *= strong_push
             else:
                 l_home *= 1.05
 
+    # --- AWAY LOSING ---
     elif state == "Away Losing":
+
         if gap_level == "balanced":
             l_away *= medium_push
             l_home *= win_reduce
+
         elif gap_level == "medium":
             if is_away_strong:
                 l_away *= medium_push
             else:
                 l_home *= 1.07
+
         elif gap_level == "strong":
             if is_away_strong:
                 l_away *= strong_push
             else:
                 l_away *= 1.05
-
-    elif state == "Home Losing BIG":
-        if is_home_strong:
-            l_home *= strong_push * 1.20
-        else:
-            l_home *= 1.05
-
-    elif state == "Away Losing BIG":
-        if is_away_strong:
-            l_away *= strong_push * 1.20
-        else:
-            l_away *= 1.05
 
     return l_home, l_away
 
@@ -277,15 +273,8 @@ for name, (home, away, adj) in markets.items():
         new_total = l_home + l_away
         if new_total > 0:
             scale = l_total_before / new_total
-
-            # 🔥 FIX
-            if score_state == "Home Losing BIG":
-                l_away *= scale
-            elif score_state == "Away Losing BIG":
-                l_home *= scale
-            else:
-                l_home *= scale
-                l_away *= scale
+            l_home *= scale
+            l_away *= scale
 
     l_total = l_home + l_away
     total_lambdas[name] = l_total
