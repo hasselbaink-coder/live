@@ -274,18 +274,24 @@ for name, (home, away, adj) in markets.items():
 
     normalize = False
 
-    if score_state not in ["Home Losing BIG", "Away Losing BIG"]:
-        if name in ["Shots on Target", "Corners", "Throw-ins"]:
-            normalize = True
-        elif name == "Shots" and gap_level != "strong":
-            normalize = True
+    if name in ["Shots on Target", "Corners", "Throw-ins"]:
+        normalize = True
+    elif name == "Shots" and gap_level != "strong":
+        normalize = True
 
     if normalize:
         new_total = l_home + l_away
         if new_total > 0:
             scale = l_total_before / new_total
-            l_home *= scale
-            l_away *= scale
+
+            # 🔥 FIX BIG STATES
+            if score_state == "Home Losing BIG":
+                l_away *= scale
+            elif score_state == "Away Losing BIG":
+                l_home *= scale
+            else:
+                l_home *= scale
+                l_away *= scale
 
     l_total = l_home + l_away
     total_lambdas[name] = l_total
