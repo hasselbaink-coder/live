@@ -119,17 +119,14 @@ def apply_game_state(name, l_home, l_away, state, start_min,
     medium_push += factor * 0.07
 
     if state == "Home Losing":
-
         if gap_level == "balanced":
             l_home *= medium_push
             l_away *= win_reduce
-
         elif gap_level == "medium":
             if is_home_strong:
                 l_home *= medium_push
             else:
                 l_away *= 1.07
-
         elif gap_level == "strong":
             if is_home_strong:
                 l_home *= strong_push
@@ -137,17 +134,14 @@ def apply_game_state(name, l_home, l_away, state, start_min,
                 l_home *= 1.05
 
     elif state == "Away Losing":
-
         if gap_level == "balanced":
             l_away *= medium_push
             l_home *= win_reduce
-
         elif gap_level == "medium":
             if is_away_strong:
                 l_away *= medium_push
             else:
                 l_home *= 1.07
-
         elif gap_level == "strong":
             if is_away_strong:
                 l_away *= strong_push
@@ -284,7 +278,7 @@ for name, (home, away, adj) in markets.items():
         if new_total > 0:
             scale = l_total_before / new_total
 
-            # 🔥 FIX BIG STATES
+            # 🔥 FIX
             if score_state == "Home Losing BIG":
                 l_away *= scale
             elif score_state == "Away Losing BIG":
