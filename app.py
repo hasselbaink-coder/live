@@ -1,8 +1,8 @@
+
 import streamlit as st
 import math
 
 st.set_page_config(page_title="Football Model", layout="centered")
-
 st.title("Live Football Model")
 
 # ---------------- INPUTS ----------------
@@ -35,10 +35,7 @@ away_off = st.number_input("Away Offsides", value=2.0)
 st.markdown("---")
 
 # ---------------- STATE ----------------
-score_state = st.selectbox(
-    "Score State",
-    ["Draw", "Home Losing", "Away Losing"]
-)
+score_state = st.selectbox("Score State", ["Draw", "Home Losing", "Away Losing"])
 
 start_min = st.slider("Start minute", 1, 90, 30)
 
@@ -56,17 +53,10 @@ margin = 0.08
 fh_min = 46.5
 sh_min = 48.5
 
-def prob(l):
-    return 1 - math.exp(-l)
-
-def odds(p):
-    return (1/p)*(1-margin) if p > 0 else 0
-
-def calc(avg, total, m):
-    return (avg/total)*m
-
-def split(x):
-    return x*0.48, x*0.52
+def prob(l): return 1 - math.exp(-l)
+def odds(p): return (1/p)*(1-margin) if p > 0 else 0
+def calc(avg, total, m): return (avg/total)*m
+def split(x): return x*0.48, x*0.52
 
 # ---------------- GAP ----------------
 ratio = max(home_shot, away_shot) / max(1, min(home_shot, away_shot))
@@ -84,6 +74,7 @@ def apply(name, lh, la):
     home_strong = home_shot > away_shot
     away_strong = away_shot > home_shot
 
+    # multipliers
     if name == "Shots":
         sp, mp, wr = 1.30, 1.18, 0.93
     elif name == "Shots on Target":
@@ -97,6 +88,16 @@ def apply(name, lh, la):
     else:
         return lh, la
 
+    # -------- GOAL KICK (MIRROR) --------
+    if name == "Goal Kicks":
+        if score_state == "Home Losing":
+            lh *= 0.90
+            la *= 1.10
+        elif score_state == "Away Losing":
+            lh *= 1.10
+            la *= 0.90
+        return lh, la
+
     # -------- BALANCED --------
     if gap == "balanced":
         if score_state == "Home Losing":
@@ -107,30 +108,14 @@ def apply(name, lh, la):
             lh *= wr
         return lh, la
 
-    # -------- GOAL KICK (🔥 MIRROR LOGIC) --------
-    if name == "Goal Kicks":
-
-        if score_state == "Home Losing":
-            lh *= 0.90
-            la *= 1.10
-
-        elif score_state == "Away Losing":
-            lh *= 1.10
-            la *= 0.90
-
-        return lh, la
-
     # -------- HOME LOSING --------
     if score_state == "Home Losing":
-
         if gap == "medium":
             if ratio < 1.5:
                 lh *= mp
                 la *= wr
-            else:
-                if home_strong:
-                    lh *= mp
-
+            elif home_strong:
+                lh *= mp
         elif gap == "strong":
             if home_strong:
                 lh *= sp * 1.25
@@ -139,15 +124,12 @@ def apply(name, lh, la):
 
     # -------- AWAY LOSING --------
     elif score_state == "Away Losing":
-
         if gap == "medium":
             if ratio < 1.5:
                 la *= mp
                 lh *= wr
-            else:
-                if away_strong:
-                    la *= mp
-
+            elif away_strong:
+                la *= mp
         elif gap == "strong":
             if away_strong:
                 la *= sp * 1.25
@@ -158,16 +140,16 @@ def apply(name, lh, la):
 
 # ---------------- CARD DIST ----------------
 card_dist = [
-    (1, 15, 0.05), (15, 30, 0.11), (30, 45, 0.175),
-    (45, 60, 0.15), (60, 75, 0.18), (75, 90, 0.34),
+    (1,15,0.05),(15,30,0.11),(30,45,0.175),
+    (45,60,0.15),(60,75,0.18),(75,90,0.34)
 ]
 
 def card_lambda(avg, start, end):
     total = 0
-    for s, e, w in card_dist:
-        overlap = max(0, min(end, e) - max(start, s))
-        if overlap > 0:
-            total += avg * w * (overlap / (e - s))
+    for s,e,w in card_dist:
+        overlap = max(0, min(end,e)-max(start,s))
+        if overlap>0:
+            total += avg*w*(overlap/(e-s))
     return total
 
 # ---------------- MARKETS ----------------
@@ -184,79 +166,68 @@ markets = {
 
 st.subheader("Results")
 
-for name, (h, a, adj) in markets.items():
+for name,(h,a,adj) in markets.items():
 
-    if name == "Cards":
-        lh = card_lambda(h, start_min, end_min)
-        la = card_lambda(a, start_min, end_min)
+    if name=="Cards":
+        lh = card_lambda(h,start_min,end_min)
+        la = card_lambda(a,start_min,end_min)
 
-    elif name == "Offsides":
-        base = fh_min if end_min <= 45 else sh_min
-        lh = calc(h, base, minutes)
-        la = calc(a, base, minutes)
+    elif name=="Offsides":
+        base = fh_min if end_min<=45 else sh_min
+        lh = calc(h,base,minutes)
+        la = calc(a,base,minutes)
 
     else:
-        fh_h, sh_h = split(h)
-        fh_a, sh_a = split(a)
+        fh_h,sh_h = split(h)
+        fh_a,sh_a = split(a)
 
-        if name == "Throw-ins":
+        if name=="Throw-ins":
             sh_h = fh_h - 0.25
             sh_a = fh_a - 0.25
         else:
             sh_h = fh_h * adj
             sh_a = fh_a * adj
 
-        if end_min <= 45:
-            lh = calc(fh_h, fh_min, minutes)
-            la = calc(fh_a, fh_min, minutes)
+        if end_min<=45:
+            lh = calc(fh_h,fh_min,minutes)
+            la = calc(fh_a,fh_min,minutes)
         else:
-            lh = calc(sh_h, sh_min, minutes)
-            la = calc(sh_a, sh_min, minutes)
+            lh = calc(sh_h,sh_min,minutes)
+            la = calc(sh_a,sh_min,minutes)
 
-    boost = 1 + (minutes / 10) * 0.15
-
-    if name in ["Shots", "Shots on Target"]:
+    # boosts
+    boost = 1 + (minutes/10)*0.15
+    if name in ["Shots","Shots on Target"]:
         lh *= boost
         la *= boost
 
-    if start_min >= 75 and name not in ["Cards", "Offsides", "Fouls"]:
-        f = (start_min - 75) / 15
-
-        if name == "Shots":
-            lh *= 1 + f * 0.30
-            la *= 1 + f * 0.30
-        elif name == "Shots on Target":
-            lh *= 1 + f * 0.22
-            la *= 1 + f * 0.22
-        elif name == "Corners":
-            lh *= 1 + f * 0.25
-            la *= 1 + f * 0.25
+    if start_min >= 75:
+        f = (start_min-75)/15
+        if name=="Shots":
+            lh *= 1+f*0.30; la *= 1+f*0.30
+        elif name=="Shots on Target":
+            lh *= 1+f*0.22; la *= 1+f*0.22
+        elif name=="Corners":
+            lh *= 1+f*0.25; la *= 1+f*0.25
 
     total_before = lh + la
 
     lh, la = apply(name, lh, la)
 
-    normalize = False
+    # -------- TOTAL FREEZE FIX --------
+    if name in ["Shots","Shots on Target","Corners"]:
+        ratio_local = max(h,a)/max(1,min(h,a))
 
-    if gap == "balanced":
-        normalize = False
-    elif name in ["Shots on Target", "Corners"]:
-        normalize = True
-    elif name == "Throw-ins":
-        normalize = False
-    elif name == "Shots" and gap != "strong":
-        normalize = True
-
-    if normalize:
-        new = lh + la
-        if new > 0:
-            scale = total_before / new
-            lh *= scale
-            la *= scale
+        if ratio_local < 1.2:
+            new_total = lh + la
+            if new_total > 0:
+                scale = total_before / new_total
+                lh *= scale
+                la *= scale
 
     ph = prob(lh)
     pa = prob(la)
-    pt = prob(lh + la)
+    pt = prob(lh+la)
 
     st.markdown(f"### {name}")
     st.write(f"Home → {round(ph*100,1)}% | Odds: {round(odds(ph),2)}")
