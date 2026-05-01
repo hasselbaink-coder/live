@@ -1,4 +1,3 @@
-
 import streamlit as st
 import math
 
@@ -38,13 +37,7 @@ st.markdown("---")
 score_state = st.selectbox("Score State", ["Draw", "Home Losing", "Away Losing"])
 
 start_min = st.slider("Start minute", 1, 90, 30)
-
-if start_min < 45:
-    max_end = min(start_min + 5, 45)
-else:
-    max_end = min(start_min + 5, 90)
-
-end_min = st.slider("End minute", start_min + 1, max_end, start_min + 5)
+end_min = st.slider("End minute", start_min + 1, min(start_min + 5, 90), start_min + 5)
 
 minutes = end_min - start_min
 
@@ -60,13 +53,7 @@ def split(x): return x*0.48, x*0.52
 
 # ---------------- GAP ----------------
 ratio = max(home_shot, away_shot) / max(1, min(home_shot, away_shot))
-
-if ratio < 1.2:
-    gap = "balanced"
-elif ratio < 2:
-    gap = "medium"
-else:
-    gap = "strong"
+gap = "balanced" if ratio < 1.2 else "medium" if ratio < 2 else "strong"
 
 # ---------------- GAME STATE ----------------
 def apply(name, lh, la):
@@ -74,7 +61,6 @@ def apply(name, lh, la):
     home_strong = home_shot > away_shot
     away_strong = away_shot > home_shot
 
-    # multipliers
     if name == "Shots":
         sp, mp, wr = 1.30, 1.18, 0.93
     elif name == "Shots on Target":
@@ -88,7 +74,7 @@ def apply(name, lh, la):
     else:
         return lh, la
 
-    # -------- GOAL KICK (MIRROR) --------
+    # -------- GOAL KICK MIRROR --------
     if name == "Goal Kicks":
         if score_state == "Home Losing":
             lh *= 0.90
@@ -195,29 +181,34 @@ for name,(h,a,adj) in markets.items():
             lh = calc(sh_h,sh_min,minutes)
             la = calc(sh_a,sh_min,minutes)
 
-    # boosts
-    boost = 1 + (minutes/10)*0.15
-    if name in ["Shots","Shots on Target"]:
-        lh *= boost
-        la *= boost
+    # -------- THROW-IN BOOST --------
+    if name == "Throw-ins":
+        lh *= 1 + (minutes/10)*0.10
+        la *= 1 + (minutes/10)*0.10
 
-    if start_min >= 75:
+    # -------- LATE BOOST ONLY --------
+    if start_min >= 75 and name not in ["Cards","Offsides","Fouls"]:
         f = (start_min-75)/15
+
         if name=="Shots":
-            lh *= 1+f*0.30; la *= 1+f*0.30
+            lh *= 1+f*0.30
+            la *= 1+f*0.30
+
         elif name=="Shots on Target":
-            lh *= 1+f*0.22; la *= 1+f*0.22
+            lh *= 1+f*0.22
+            la *= 1+f*0.22
+
         elif name=="Corners":
-            lh *= 1+f*0.25; la *= 1+f*0.25
+            lh *= 1+f*0.25
+            la *= 1+f*0.25
 
     total_before = lh + la
 
     lh, la = apply(name, lh, la)
 
-    # -------- TOTAL FREEZE FIX --------
+    # -------- TOTAL FREEZE --------
     if name in ["Shots","Shots on Target","Corners"]:
         ratio_local = max(h,a)/max(1,min(h,a))
-
         if ratio_local < 1.2:
             new_total = lh + la
             if new_total > 0:
