@@ -34,13 +34,11 @@ away_off = st.number_input("Away Offsides", value=2.0)
 
 st.markdown("---")
 
-# --- SCORE STATE ---
 score_state = st.selectbox(
     "Score State",
     ["Draw", "Home Losing", "Away Losing"]
 )
 
-# --- INTERVAL ---
 start_min = st.slider("Start minute", 1, 90, 10)
 
 if start_min < 45:
@@ -51,14 +49,12 @@ else:
 end_min = st.slider("End minute", start_min + 1, max_end, start_min + 1)
 
 minutes = end_min - start_min
-st.write(f"Interval: {minutes} minute(s)")
 
 # --- CONSTANTS ---
 margin = 0.08
 fh_min = 46.5
 sh_min = 48.5
 
-# --- FUNCTIONS ---
 def prob(lmbda):
     return 1 - math.exp(-lmbda)
 
@@ -76,7 +72,7 @@ ratio = max(home_shot, away_shot) / max(1, min(home_shot, away_shot))
 
 if ratio < 1.2:
     gap_level = "balanced"
-elif ratio < 2.0:
+elif ratio < 2:
     gap_level = "medium"
 else:
     gap_level = "strong"
@@ -104,25 +100,31 @@ def apply_game_state(name, l_home, l_away):
     strong_push += factor * 0.10
     medium_push += factor * 0.07
 
-    # 🔥 BALANCED SYMMETRY FIX
+    # --- BALANCED FIX ---
     if gap_level == "balanced":
-
         if score_state == "Home Losing":
             l_home *= medium_push
             l_away *= win_reduce
-
         elif score_state == "Away Losing":
             l_away *= medium_push
             l_home *= win_reduce
-
         return l_home, l_away
 
     # --- HOME LOSING ---
     if score_state == "Home Losing":
 
-        # 🔥 GOAL KICK FIX (correct direction)
         if name == "Goal Kicks":
-            l_away *= 1.10
+
+            if gap_level == "strong" and is_home_strong:
+                l_away *= 1.25
+                l_home *= 1.08
+            elif gap_level == "medium":
+                l_away *= 1.15
+                l_home *= 1.05
+            else:
+                l_away *= 1.10
+                l_home *= 1.03
+
             return l_home, l_away
 
         if gap_level == "medium":
@@ -137,16 +139,25 @@ def apply_game_state(name, l_home, l_away):
 
         elif gap_level == "strong":
             if is_home_strong:
-                l_home *= strong_push
+                l_home *= strong_push * 1.15
             else:
                 l_home *= 1.05
 
     # --- AWAY LOSING ---
     elif score_state == "Away Losing":
 
-        # 🔥 GOAL KICK FIX (correct direction)
         if name == "Goal Kicks":
-            l_home *= 1.10
+
+            if gap_level == "strong" and is_away_strong:
+                l_home *= 1.25
+                l_away *= 1.08
+            elif gap_level == "medium":
+                l_home *= 1.15
+                l_away *= 1.05
+            else:
+                l_home *= 1.10
+                l_away *= 1.03
+
             return l_home, l_away
 
         if gap_level == "medium":
@@ -161,7 +172,7 @@ def apply_game_state(name, l_home, l_away):
 
         elif gap_level == "strong":
             if is_away_strong:
-                l_away *= strong_push
+                l_away *= strong_push * 1.15
             else:
                 l_away *= 1.06
 
@@ -227,7 +238,6 @@ for name, (home, away, adj) in markets.items():
             l_home = calc_lambda(sh_home, sh_min, minutes)
             l_away = calc_lambda(sh_away, sh_min, minutes)
 
-    # BOOSTS
     boost = 1 + (minutes / 10) * 0.15
 
     if name in ["Shots", "Shots on Target"]:
@@ -253,11 +263,12 @@ for name, (home, away, adj) in markets.items():
 
     l_home, l_away = apply_game_state(name, l_home, l_away)
 
-    # NORMALIZATION
     normalize = False
 
-    if name in ["Shots on Target", "Corners", "Throw-ins"]:
+    if name in ["Shots on Target", "Corners"]:
         normalize = True
+    elif name == "Throw-ins":
+        normalize = False
     elif name == "Shots" and gap_level != "strong":
         normalize = True
     elif name == "Goal Kicks":
