@@ -1,4 +1,3 @@
-
 import streamlit as st
 import math
 
@@ -34,6 +33,7 @@ away_off = st.number_input("Away Offsides", value=2.0)
 
 st.markdown("---")
 
+# 🔥 STATE
 score_state = st.selectbox("Score State", ["Draw", "Home Losing", "Away Losing"])
 
 # --- INTERVAL ---
@@ -47,6 +47,7 @@ else:
 end_min = st.slider("End minute", start_min + 1, max_end, start_min + 1)
 
 minutes = end_min - start_min
+st.write(f"Interval: {minutes} minute(s)")
 
 # --- CONSTANTS ---
 margin = 0.08
@@ -65,72 +66,6 @@ def calc_lambda(avg, total_minutes, interval):
 def split(avg):
     return avg * 0.48, avg * 0.52
 
-# --- GAP ---
-ratio = max(home_shot, away_shot) / max(1, min(home_shot, away_shot))
-gap = "balanced" if ratio < 1.2 else "medium" if ratio < 2 else "strong"
-
-# --- STATE FUNCTION ---
-def apply(name, lh, la, base_total):
-
-    # ❌ არ ვეხებით
-    if name in ["Fouls", "Offsides", "Cards"]:
-        return lh, la
-
-    # GK mirror
-    if name == "Goal Kicks":
-        if score_state == "Home Losing":
-            lh *= 0.90
-            la *= 1.10
-        elif score_state == "Away Losing":
-            lh *= 1.10
-            la *= 0.90
-        return lh, la
-
-    # multipliers
-    if name == "Shots":
-        sp, mp, wr = 1.30, 1.18, 0.93
-    elif name == "Shots on Target":
-        sp, mp, wr = 1.22, 1.15, 0.95
-    elif name == "Corners":
-        sp, mp, wr = 1.22, 1.15, 0.95
-    elif name == "Throw-ins":
-        sp, mp, wr = 1.20, 1.12, 0.96
-    else:
-        return lh, la
-
-    # balanced symmetry
-    if gap == "balanced":
-        if score_state == "Home Losing":
-            lh *= mp
-            la *= wr
-        elif score_state == "Away Losing":
-            la *= mp
-            lh *= wr
-    else:
-        if score_state == "Home Losing":
-            if gap == "medium":
-                lh *= mp
-            else:
-                lh *= sp
-        elif score_state == "Away Losing":
-            if gap == "medium":
-                la *= mp
-            else:
-                la *= sp
-
-    # 🔥 TOTAL FREEZE (Shots + SOT only, near balanced)
-    if name in ["Shots", "Shots on Target"]:
-        ratio_local = max(lh, la) / max(1e-6, min(lh, la))
-
-        if ratio_local < 1.25:
-            new_total = lh + la
-            if new_total > 0:
-                scale = base_total / new_total
-                lh *= scale
-                la *= scale
-
-    return lh, la
-
 # --- BOOSTS ---
 throw_boost = 1 + (minutes / 10) * 0.15
 shot_interval_boost = 1 + (minutes / 10) * 0.15
@@ -139,7 +74,7 @@ early_throw_boost = 1
 if start_min <= 10:
     early_throw_boost = 1 + ((10 - start_min) / 10) * 0.12
 
-# --- CARD DIST ---
+# --- CARD DISTRIBUTION ---
 card_dist = [
     (1, 15, 0.05), (15, 30, 0.11), (30, 45, 0.175),
     (45, 60, 0.15), (60, 75, 0.18), (75, 90, 0.34),
@@ -152,6 +87,65 @@ def card_lambda(avg, start, end):
         if overlap > 0:
             total += avg * w * (overlap / (e - s))
     return total
+
+# --- STATE APPLY ---
+def apply(name, lh, la, base_total, home, away):
+
+    # არ ვეხებით
+    if name in ["Fouls", "Offsides", "Cards"]:
+        return lh, la
+
+    # GK mirror
+    if name == "Goal Kicks":
+        if score_state == "Home Losing":
+            lh *= 0.90
+            la *= 1.10
+        elif score_state == "Away Losing":
+            lh *= 1.10
+            la *= 0.90
+
+    else:
+        # GAP
+        ratio = max(home_shot, away_shot) / max(1, min(home_shot, away_shot))
+        gap = "balanced" if ratio < 1.2 else "medium" if ratio < 2 else "strong"
+
+        if gap == "balanced":
+            if score_state == "Home Losing":
+                lh *= 1.15
+                la *= 0.95
+            elif score_state == "Away Losing":
+                la *= 1.15
+                lh *= 0.95
+
+        else:
+            if score_state == "Home Losing":
+                lh *= 1.15 if gap == "medium" else 1.25
+            elif score_state == "Away Losing":
+                la *= 1.15 if gap == "medium" else 1.25
+
+    # 🔥 TOTAL CONTROL
+    ratio_base = max(home, away) / max(1, min(home, away))
+    strong_gap = ratio_base >= 1.5
+
+    favorite_home = home > away
+    favorite_away = away > home
+
+    exception = False
+
+    if name in ["Shots", "Shots on Target"]:
+        if strong_gap:
+            if (score_state == "Home Losing" and favorite_home) or \
+               (score_state == "Away Losing" and favorite_away):
+                exception = True
+
+    if not exception:
+        new_total = lh + la
+        if new_total > 0:
+            scale = base_total / new_total
+            lh *= scale
+            la *= scale
+
+    return lh, la
 
 # --- MARKETS ---
 markets = {
@@ -166,6 +160,8 @@ markets = {
 }
 
 st.subheader("Results")
+
+total_lambdas = {}
 
 for name, (home, away, adj) in markets.items():
 
@@ -199,7 +195,7 @@ for name, (home, away, adj) in markets.items():
             l_home = calc_lambda(sh_home, sh_min, minutes)
             l_away = calc_lambda(sh_away, sh_min, minutes)
 
-    # BOOSTS unchanged
+    # BOOSTS
     if name == "Throw-ins":
         l_home *= throw_boost * early_throw_boost
         l_away *= throw_boost * early_throw_boost
@@ -208,12 +204,32 @@ for name, (home, away, adj) in markets.items():
         l_home *= shot_interval_boost
         l_away *= shot_interval_boost
 
+    if start_min >= 75 and name not in ["Cards", "Offsides", "Fouls"]:
+        factor = (start_min - 75) / 15
+
+        if name == "Shots":
+            l_home *= 1 + factor * 0.30
+            l_away *= 1 + factor * 0.30
+
+        elif name == "Shots on Target":
+            l_home *= 1 + factor * 0.22
+            l_away *= 1 + factor * 0.22
+
+        elif name == "Corners":
+            l_home *= 1 + factor * 0.25
+            l_away *= 1 + factor * 0.25
+
+        elif name == "Goal Kicks":
+            l_home *= 1 + factor * 0.10
+            l_away *= 1 + factor * 0.10
+
     base_total = l_home + l_away
 
-    # 🔥 STATE
-    l_home, l_away = apply(name, l_home, l_away, base_total)
+    # 🔥 STATE APPLY
+    l_home, l_away = apply(name, l_home, l_away, base_total, home, away)
 
     l_total = l_home + l_away
+    total_lambdas[name] = l_total
 
     p_home = prob(l_home)
     p_away = prob(l_away)
