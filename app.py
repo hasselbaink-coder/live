@@ -1,3 +1,4 @@
+
 import streamlit as st
 import math
 
@@ -97,7 +98,7 @@ def apply(name, lh, la):
     else:
         return lh, la
 
-    # -------- BALANCED SYMMETRY --------
+    # -------- BALANCED --------
     if gap == "balanced":
         if score_state == "Home Losing":
             lh *= mp
@@ -107,12 +108,15 @@ def apply(name, lh, la):
             lh *= wr
         return lh, la
 
-    # -------- GOAL KICK FIX --------
+    # -------- GOAL KICK (FIXED CORRECTLY) --------
     if name == "Goal Kicks":
+
         if score_state == "Home Losing":
-            la *= 1.20
+            la *= 1.25   # 🔥 opponent GK
+
         elif score_state == "Away Losing":
-            lh *= 1.20
+            lh *= 1.25
+
         return lh, la
 
     # -------- HOME LOSING --------
@@ -128,7 +132,7 @@ def apply(name, lh, la):
 
         elif gap == "strong":
             if home_strong:
-                lh *= sp * 1.25   # FIX
+                lh *= sp * 1.25
             else:
                 lh *= 1.05
 
@@ -145,7 +149,7 @@ def apply(name, lh, la):
 
         elif gap == "strong":
             if away_strong:
-                la *= sp * 1.25   # FIX
+                la *= sp * 1.25
             else:
                 la *= 1.06
 
@@ -208,8 +212,8 @@ for name, (h, a, adj) in markets.items():
             lh = calc(sh_h, sh_min, minutes)
             la = calc(sh_a, sh_min, minutes)
 
-    # -------- BOOSTS --------
     boost = 1 + (minutes / 10) * 0.15
+
     if name in ["Shots", "Shots on Target"]:
         lh *= boost
         la *= boost
@@ -231,7 +235,6 @@ for name, (h, a, adj) in markets.items():
 
     lh, la = apply(name, lh, la)
 
-    # -------- NORMALIZATION --------
     normalize = False
 
     if gap == "balanced":
