@@ -72,10 +72,7 @@ def split(avg):
     return avg * 0.48, avg * 0.52
 
 # --- GAP ---
-if min(home_shot, away_shot) == 0:
-    ratio = 1
-else:
-    ratio = max(home_shot, away_shot) / min(home_shot, away_shot)
+ratio = max(home_shot, away_shot) / max(1, min(home_shot, away_shot))
 
 if ratio < 1.2:
     gap_level = "balanced"
@@ -85,32 +82,21 @@ else:
     gap_level = "strong"
 
 # --- GAME STATE ---
-def apply_game_state(name, l_home, l_away, state, start_min,
-                     gap_level, home_shot, away_shot):
+def apply_game_state(name, l_home, l_away):
 
     is_home_strong = home_shot > away_shot
     is_away_strong = away_shot > home_shot
 
     if name == "Shots":
-        strong_push = 1.30
-        medium_push = 1.18
-        win_reduce = 0.93
-
+        strong_push, medium_push, win_reduce = 1.30, 1.18, 0.93
     elif name == "Shots on Target":
-        strong_push = 1.22
-        medium_push = 1.15
-        win_reduce = 0.95
-
+        strong_push, medium_push, win_reduce = 1.22, 1.15, 0.95
     elif name == "Corners":
-        strong_push = 1.22
-        medium_push = 1.15
-        win_reduce = 0.95
-
+        strong_push, medium_push, win_reduce = 1.22, 1.15, 0.95
     elif name == "Throw-ins":
-        strong_push = 1.20
-        medium_push = 1.12
-        win_reduce = 0.96
-
+        strong_push, medium_push, win_reduce = 1.20, 1.12, 0.96
+    elif name == "Goal Kicks":
+        strong_push, medium_push, win_reduce = 1.10, 1.06, 0.97
     else:
         return l_home, l_away
 
@@ -118,18 +104,25 @@ def apply_game_state(name, l_home, l_away, state, start_min,
     strong_push += factor * 0.10
     medium_push += factor * 0.07
 
-    # --- HOME LOSING ---
-    if state == "Home Losing":
+    if score_state == "Home Losing":
+
+        if name == "Goal Kicks":
+            l_home *= 1.10
+            return l_home, l_away
 
         if gap_level == "balanced":
             l_home *= medium_push
             l_away *= win_reduce
 
         elif gap_level == "medium":
-            if is_home_strong:
+            if ratio < 1.5:
                 l_home *= medium_push
+                l_away *= win_reduce
             else:
-                l_away *= 1.07
+                if is_home_strong:
+                    l_home *= medium_push
+                else:
+                    l_away *= 1.07
 
         elif gap_level == "strong":
             if is_home_strong:
@@ -137,27 +130,33 @@ def apply_game_state(name, l_home, l_away, state, start_min,
             else:
                 l_home *= 1.05
 
-    # --- AWAY LOSING ---
-    elif state == "Away Losing":
+    elif score_state == "Away Losing":
+
+        if name == "Goal Kicks":
+            l_away *= 1.10
+            return l_home, l_away
 
         if gap_level == "balanced":
             l_away *= medium_push
             l_home *= win_reduce
 
         elif gap_level == "medium":
-            if is_away_strong:
+            if ratio < 1.5:
                 l_away *= medium_push
+                l_home *= win_reduce
             else:
-                l_home *= 1.07
+                if is_away_strong:
+                    l_away *= medium_push
+                else:
+                    l_home *= 1.07
 
         elif gap_level == "strong":
             if is_away_strong:
                 l_away *= strong_push
             else:
-                l_away *= 1.05
+                l_away *= 1.06
 
     return l_home, l_away
-
 
 # --- CARD DISTRIBUTION ---
 card_dist = [
@@ -173,7 +172,6 @@ def card_lambda(avg, start, end):
             total += avg * w * (overlap / (e - s))
     return total
 
-
 # --- MARKETS ---
 markets = {
     "Shots": (home_shot, away_shot, 1.17),
@@ -187,8 +185,6 @@ markets = {
 }
 
 st.subheader("Results")
-
-total_lambdas = {}
 
 for name, (home, away, adj) in markets.items():
 
@@ -222,19 +218,12 @@ for name, (home, away, adj) in markets.items():
             l_home = calc_lambda(sh_home, sh_min, minutes)
             l_away = calc_lambda(sh_away, sh_min, minutes)
 
-    throw_boost = 1 + (minutes / 10) * 0.15
-    shot_interval_boost = 1 + (minutes / 10) * 0.15
-
-    if name == "Throw-ins":
-        early = 1
-        if start_min <= 10:
-            early = 1 + ((10 - start_min) / 10) * 0.12
-        l_home *= throw_boost * early
-        l_away *= throw_boost * early
+    # boosts
+    boost = 1 + (minutes / 10) * 0.15
 
     if name in ["Shots", "Shots on Target"]:
-        l_home *= shot_interval_boost
-        l_away *= shot_interval_boost
+        l_home *= boost
+        l_away *= boost
 
     if start_min >= 75 and name not in ["Cards", "Offsides", "Fouls"]:
         factor = (start_min - 75) / 15
@@ -251,23 +240,19 @@ for name, (home, away, adj) in markets.items():
             l_home *= 1 + factor * 0.25
             l_away *= 1 + factor * 0.25
 
-        elif name == "Goal Kicks":
-            l_home *= 1 + factor * 0.10
-            l_away *= 1 + factor * 0.10
-
     l_total_before = l_home + l_away
 
-    l_home, l_away = apply_game_state(
-        name, l_home, l_away, score_state,
-        start_min, gap_level, home_shot, away_shot
-    )
+    l_home, l_away = apply_game_state(name, l_home, l_away)
 
+    # normalization
     normalize = False
 
     if name in ["Shots on Target", "Corners", "Throw-ins"]:
         normalize = True
     elif name == "Shots" and gap_level != "strong":
         normalize = True
+    elif name == "Goal Kicks":
+        normalize = False
 
     if normalize:
         new_total = l_home + l_away
@@ -276,15 +261,14 @@ for name, (home, away, adj) in markets.items():
             l_home *= scale
             l_away *= scale
 
-    l_total = l_home + l_away
-    total_lambdas[name] = l_total
-
     p_home = prob(l_home)
     p_away = prob(l_away)
-    p_total = prob(l_total)
+    p_total = prob(l_home + l_away)
 
     st.markdown(f"### {name}")
     st.write(f"Home → {round(p_home*100,1)}% | Odds: {round(odds(p_home),2)}")
     st.write(f"Away → {round(p_away*100,1)}% | Odds: {round(odds(p_away),2)}")
     st.write(f"Total → {round(p_total*100,1)}% | Odds: {round(odds(p_total),2)}")
     st.markdown("---")
+
+ 
