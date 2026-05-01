@@ -34,19 +34,21 @@ away_off = st.number_input("Away Offsides", value=2.0)
 
 st.markdown("---")
 
+# --- SCORE STATE ---
 score_state = st.selectbox(
     "Score State",
     ["Draw", "Home Losing", "Away Losing"]
 )
 
-start_min = st.slider("Start minute", 1, 90, 10)
+# --- INTERVAL ---
+start_min = st.slider("Start minute", 1, 90, 30)
 
 if start_min < 45:
     max_end = min(start_min + 5, 45)
 else:
     max_end = min(start_min + 5, 90)
 
-end_min = st.slider("End minute", start_min + 1, max_end, start_min + 1)
+end_min = st.slider("End minute", start_min + 1, max_end, start_min + 5)
 
 minutes = end_min - start_min
 
@@ -55,6 +57,7 @@ margin = 0.08
 fh_min = 46.5
 sh_min = 48.5
 
+# --- FUNCTIONS ---
 def prob(lmbda):
     return 1 - math.exp(-lmbda)
 
@@ -96,11 +99,7 @@ def apply_game_state(name, l_home, l_away):
     else:
         return l_home, l_away
 
-    factor = max(0, (start_min - 60) / 30)
-    strong_push += factor * 0.10
-    medium_push += factor * 0.07
-
-    # --- BALANCED FIX ---
+    # --- BALANCED ---
     if gap_level == "balanced":
         if score_state == "Home Losing":
             l_home *= medium_push
@@ -110,22 +109,16 @@ def apply_game_state(name, l_home, l_away):
             l_home *= win_reduce
         return l_home, l_away
 
+    # --- GOAL KICK FIX ---
+    if name == "Goal Kicks":
+        if score_state == "Home Losing":
+            l_away *= 1.20
+        elif score_state == "Away Losing":
+            l_home *= 1.20
+        return l_home, l_away
+
     # --- HOME LOSING ---
     if score_state == "Home Losing":
-
-        if name == "Goal Kicks":
-
-            if gap_level == "strong" and is_home_strong:
-                l_away *= 1.25
-                l_home *= 1.08
-            elif gap_level == "medium":
-                l_away *= 1.15
-                l_home *= 1.05
-            else:
-                l_away *= 1.10
-                l_home *= 1.03
-
-            return l_home, l_away
 
         if gap_level == "medium":
             if ratio < 1.5:
@@ -134,31 +127,15 @@ def apply_game_state(name, l_home, l_away):
             else:
                 if is_home_strong:
                     l_home *= medium_push
-                else:
-                    l_away *= 1.07
 
         elif gap_level == "strong":
             if is_home_strong:
-                l_home *= strong_push * 1.15
+                l_home *= strong_push * 1.25   # 🔥 SOT FIX
             else:
                 l_home *= 1.05
 
     # --- AWAY LOSING ---
     elif score_state == "Away Losing":
-
-        if name == "Goal Kicks":
-
-            if gap_level == "strong" and is_away_strong:
-                l_home *= 1.25
-                l_away *= 1.08
-            elif gap_level == "medium":
-                l_home *= 1.15
-                l_away *= 1.05
-            else:
-                l_home *= 1.10
-                l_away *= 1.03
-
-            return l_home, l_away
 
         if gap_level == "medium":
             if ratio < 1.5:
@@ -167,12 +144,10 @@ def apply_game_state(name, l_home, l_away):
             else:
                 if is_away_strong:
                     l_away *= medium_push
-                else:
-                    l_home *= 1.07
 
         elif gap_level == "strong":
             if is_away_strong:
-                l_away *= strong_push * 1.15
+                l_away *= strong_push * 1.25
             else:
                 l_away *= 1.06
 
@@ -213,12 +188,9 @@ for name, (home, away, adj) in markets.items():
         l_away = card_lambda(away, start_min, end_min)
 
     elif name == "Offsides":
-        if end_min <= 45:
-            l_home = calc_lambda(home, fh_min, minutes)
-            l_away = calc_lambda(away, fh_min, minutes)
-        else:
-            l_home = calc_lambda(home, sh_min, minutes)
-            l_away = calc_lambda(away, sh_min, minutes)
+        base_min = fh_min if end_min <= 45 else sh_min
+        l_home = calc_lambda(home, base_min, minutes)
+        l_away = calc_lambda(away, base_min, minutes)
 
     else:
         fh_home, sh_home = split(home)
@@ -238,6 +210,7 @@ for name, (home, away, adj) in markets.items():
             l_home = calc_lambda(sh_home, sh_min, minutes)
             l_away = calc_lambda(sh_away, sh_min, minutes)
 
+    # BOOSTS
     boost = 1 + (minutes / 10) * 0.15
 
     if name in ["Shots", "Shots on Target"]:
@@ -245,24 +218,25 @@ for name, (home, away, adj) in markets.items():
         l_away *= boost
 
     if start_min >= 75 and name not in ["Cards", "Offsides", "Fouls"]:
-        factor = (start_min - 75) / 15
+        f = (start_min - 75) / 15
 
         if name == "Shots":
-            l_home *= 1 + factor * 0.30
-            l_away *= 1 + factor * 0.30
+            l_home *= 1 + f * 0.30
+            l_away *= 1 + f * 0.30
 
         elif name == "Shots on Target":
-            l_home *= 1 + factor * 0.22
-            l_away *= 1 + factor * 0.22
+            l_home *= 1 + f * 0.22
+            l_away *= 1 + f * 0.22
 
         elif name == "Corners":
-            l_home *= 1 + factor * 0.25
-            l_away *= 1 + factor * 0.25
+            l_home *= 1 + f * 0.25
+            l_away *= 1 + f * 0.25
 
-    l_total_before = l_home + l_away
+    total_before = l_home + l_away
 
     l_home, l_away = apply_game_state(name, l_home, l_away)
 
+    # NORMALIZATION
     normalize = False
 
     if name in ["Shots on Target", "Corners"]:
@@ -271,13 +245,11 @@ for name, (home, away, adj) in markets.items():
         normalize = False
     elif name == "Shots" and gap_level != "strong":
         normalize = True
-    elif name == "Goal Kicks":
-        normalize = False
 
     if normalize:
         new_total = l_home + l_away
         if new_total > 0:
-            scale = l_total_before / new_total
+            scale = total_before / new_total
             l_home *= scale
             l_away *= scale
 
@@ -286,7 +258,6 @@ for name, (home, away, adj) in markets.items():
     p_total = prob(l_home + l_away)
 
     st.markdown(f"### {name}")
-    st.write(f"Home → {round(p_home*100,1)}% | Odds: {round(odds(p_home),2)}")
-    st.write(f"Away → {round(p_away*100,1)}% | Odds: {round(odds(p_away),2)}")
-    st.write(f"Total → {round(p_total*100,1)}% | Odds: {round(odds(p_total),2)}")
+    st.write(f"Home → {round(odds(p_home),2)} | Away → {round(odds(p_away),2)}")
+    st.write(f"Total → {round(odds(p_total),2)}")
     st.markdown("---")
