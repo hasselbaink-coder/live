@@ -104,17 +104,28 @@ def apply_game_state(name, l_home, l_away):
     strong_push += factor * 0.10
     medium_push += factor * 0.07
 
-    if score_state == "Home Losing":
+    # 🔥 BALANCED SYMMETRY FIX
+    if gap_level == "balanced":
 
-        if name == "Goal Kicks":
-            l_home *= 1.10
-            return l_home, l_away
-
-        if gap_level == "balanced":
+        if score_state == "Home Losing":
             l_home *= medium_push
             l_away *= win_reduce
 
-        elif gap_level == "medium":
+        elif score_state == "Away Losing":
+            l_away *= medium_push
+            l_home *= win_reduce
+
+        return l_home, l_away
+
+    # --- HOME LOSING ---
+    if score_state == "Home Losing":
+
+        # 🔥 GOAL KICK FIX (correct direction)
+        if name == "Goal Kicks":
+            l_away *= 1.10
+            return l_home, l_away
+
+        if gap_level == "medium":
             if ratio < 1.5:
                 l_home *= medium_push
                 l_away *= win_reduce
@@ -130,17 +141,15 @@ def apply_game_state(name, l_home, l_away):
             else:
                 l_home *= 1.05
 
+    # --- AWAY LOSING ---
     elif score_state == "Away Losing":
 
+        # 🔥 GOAL KICK FIX (correct direction)
         if name == "Goal Kicks":
-            l_away *= 1.10
+            l_home *= 1.10
             return l_home, l_away
 
-        if gap_level == "balanced":
-            l_away *= medium_push
-            l_home *= win_reduce
-
-        elif gap_level == "medium":
+        if gap_level == "medium":
             if ratio < 1.5:
                 l_away *= medium_push
                 l_home *= win_reduce
@@ -218,7 +227,7 @@ for name, (home, away, adj) in markets.items():
             l_home = calc_lambda(sh_home, sh_min, minutes)
             l_away = calc_lambda(sh_away, sh_min, minutes)
 
-    # boosts
+    # BOOSTS
     boost = 1 + (minutes / 10) * 0.15
 
     if name in ["Shots", "Shots on Target"]:
@@ -244,7 +253,7 @@ for name, (home, away, adj) in markets.items():
 
     l_home, l_away = apply_game_state(name, l_home, l_away)
 
-    # normalization
+    # NORMALIZATION
     normalize = False
 
     if name in ["Shots on Target", "Corners", "Throw-ins"]:
@@ -270,5 +279,3 @@ for name, (home, away, adj) in markets.items():
     st.write(f"Away → {round(p_away*100,1)}% | Odds: {round(odds(p_away),2)}")
     st.write(f"Total → {round(p_total*100,1)}% | Odds: {round(odds(p_total),2)}")
     st.markdown("---")
-
- 
