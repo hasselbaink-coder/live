@@ -1,4 +1,3 @@
-
 import streamlit as st
 import math
 
@@ -108,14 +107,16 @@ def apply(name, lh, la):
             lh *= wr
         return lh, la
 
-    # -------- GOAL KICK (FIXED CORRECTLY) --------
+    # -------- GOAL KICK (🔥 MIRROR LOGIC) --------
     if name == "Goal Kicks":
 
         if score_state == "Home Losing":
-            la *= 1.25   # 🔥 opponent GK
+            lh *= 0.90
+            la *= 1.10
 
         elif score_state == "Away Losing":
-            lh *= 1.25
+            lh *= 1.10
+            la *= 0.90
 
         return lh, la
 
