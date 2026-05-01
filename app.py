@@ -1,4 +1,3 @@
-
 import streamlit as st
 import math
 
@@ -98,7 +97,7 @@ def apply(name, lh, la):
     else:
         return lh, la
 
-    # --- BALANCED SYMMETRY ---
+    # -------- BALANCED SYMMETRY --------
     if gap == "balanced":
         if score_state == "Home Losing":
             lh *= mp
@@ -108,15 +107,15 @@ def apply(name, lh, la):
             lh *= wr
         return lh, la
 
-    # --- GOAL KICK FIX ---
+    # -------- GOAL KICK FIX --------
     if name == "Goal Kicks":
         if score_state == "Home Losing":
-            la *= 1.20   # opponent GK ↑
+            la *= 1.20
         elif score_state == "Away Losing":
             lh *= 1.20
         return lh, la
 
-    # --- HOME LOSING ---
+    # -------- HOME LOSING --------
     if score_state == "Home Losing":
 
         if gap == "medium":
@@ -129,11 +128,11 @@ def apply(name, lh, la):
 
         elif gap == "strong":
             if home_strong:
-                lh *= sp * 1.25   # 🔥 STRONG FIX
+                lh *= sp * 1.25   # FIX
             else:
                 lh *= 1.05
 
-    # --- AWAY LOSING ---
+    # -------- AWAY LOSING --------
     elif score_state == "Away Losing":
 
         if gap == "medium":
@@ -146,7 +145,7 @@ def apply(name, lh, la):
 
         elif gap == "strong":
             if away_strong:
-                la *= sp * 1.25
+                la *= sp * 1.25   # FIX
             else:
                 la *= 1.06
 
@@ -209,7 +208,7 @@ for name, (h, a, adj) in markets.items():
             lh = calc(sh_h, sh_min, minutes)
             la = calc(sh_a, sh_min, minutes)
 
-    # boosts
+    # -------- BOOSTS --------
     boost = 1 + (minutes / 10) * 0.15
     if name in ["Shots", "Shots on Target"]:
         lh *= boost
@@ -232,10 +231,12 @@ for name, (h, a, adj) in markets.items():
 
     lh, la = apply(name, lh, la)
 
-    # normalization
+    # -------- NORMALIZATION --------
     normalize = False
 
-    if name in ["Shots on Target", "Corners"]:
+    if gap == "balanced":
+        normalize = False
+    elif name in ["Shots on Target", "Corners"]:
         normalize = True
     elif name == "Throw-ins":
         normalize = False
@@ -254,6 +255,7 @@ for name, (h, a, adj) in markets.items():
     pt = prob(lh + la)
 
     st.markdown(f"### {name}")
-    st.write(f"Home → {round(odds(ph),2)} | Away → {round(odds(pa),2)}")
-    st.write(f"Total → {round(odds(pt),2)}")
+    st.write(f"Home → {round(ph*100,1)}% | Odds: {round(odds(ph),2)}")
+    st.write(f"Away → {round(pa*100,1)}% | Odds: {round(odds(pa),2)}")
+    st.write(f"Total → {round(pt*100,1)}% | Odds: {round(odds(pt),2)}")
     st.markdown("---")
